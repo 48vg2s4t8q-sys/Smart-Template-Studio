@@ -1,0 +1,5 @@
+{
+  "name": "Smart Template Studio",
+  "description": "A split-screen WYSIWYG editor with a real-time Gemini AI assistant for co-editing and layout management.",
+  "requestFramePermissions": []
+}
