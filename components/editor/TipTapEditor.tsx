@@ -1,4 +1,3 @@
-
 import * as React from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -10,7 +9,7 @@ import { FontFamily } from '@tiptap/extension-font-family';
 import { Extension } from '@tiptap/core';
 import { Bold, Italic, Underline as UnderlineIcon } from 'lucide-react';
 
-const { useEffect } = React;
+const { useEffect, useMemo } = React;
 
 // Define FontSize extension inline
 const FontSize = Extension.create({
@@ -65,18 +64,21 @@ interface TipTapEditorProps {
 }
 
 export const TipTapEditor: React.FC<TipTapEditorProps> = ({ content, editable = true, onUpdate }) => {
+  // Memoize extensions to prevent re-initialization warnings in Strict Mode
+  const extensions = useMemo(() => [
+    StarterKit,
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
+    }),
+    Image,
+    Underline,
+    TextStyle,
+    FontFamily,
+    FontSize
+  ], []);
+
   const editor = useEditor({
-    extensions: [
-      StarterKit,
-      TextAlign.configure({
-        types: ['heading', 'paragraph'],
-      }),
-      Image,
-      Underline,
-      TextStyle,
-      FontFamily,
-      FontSize
-    ],
+    extensions,
     content: content,
     editable: editable,
     onUpdate: ({ editor }) => {

@@ -8,8 +8,8 @@ import {
   useSensor, 
   useSensors, 
   DragEndEvent, 
-  DragOverEvent,
-  DragStartEvent,
+  DragOverEvent, 
+  DragStartEvent, 
   DragOverlay,
   defaultDropAnimationSideEffects,
   DropAnimation
@@ -24,7 +24,7 @@ import { EditorBlock } from '../../types';
 import { BlockWrapper } from './BlockWrapper';
 import { TipTapEditor } from './TipTapEditor';
 import { Button } from '../ui/Button';
-import { Plus, Image as ImageIcon, Type, LayoutTemplate, FileDown, Code, Columns2 } from 'lucide-react';
+import { Plus, Minus, Image as ImageIcon, Type, LayoutTemplate, FileDown, Code, Sparkles } from 'lucide-react';
 import { generateId, exportToPdf, exportToHtml } from '../../utils';
 
 const { useState } = React;
@@ -55,7 +55,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ blocks, setBlocks }) => 
     for (const item of items) {
       if (item.columns) {
         for (const col of item.columns) {
-          if (col.id === id) return 'root'; // The column itself is in the item (not draggable separately in this model really, but safe guard)
+          if (col.id === id) return 'root'; 
           if (col.blocks.find(b => b.id === id)) return col.id;
         }
       }
@@ -136,7 +136,6 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ blocks, setBlocks }) => 
       if (activeContainer === 'root') {
          movedItem = nextBlocks.splice(activeIndex, 1)[0];
       } else {
-         // Find the parent block of the column
          const parentBlock = nextBlocks.find((b: EditorBlock) => b.columns?.some((c: any) => c.id === activeContainer));
          const column = parentBlock.columns.find((c: any) => c.id === activeContainer);
          movedItem = column.blocks.splice(activeIndex, 1)[0];
@@ -238,28 +237,55 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ blocks, setBlocks }) => 
     setBlocks(prev => [...prev, newBlock]);
   };
 
-  const addColumnsBlock = () => {
-     const countStr = window.prompt("How many columns? (1-4)", "2");
-     const count = parseInt(countStr || "0");
-     
-     if (!count || count < 1 || count > 4) return;
+  const modifyColumnCount = (blockId: string, delta: number) => {
+    setBlocks(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const updateRecursive = (items: EditorBlock[]) => {
+        for (const item of items) {
+          if (item.id === blockId) {
+            if (!item.columns) item.columns = [];
+            if (delta > 0) {
+              if (item.columns.length < 4) {
+                item.columns.push({ id: generateId(), blocks: [] });
+              }
+            } else {
+              if (item.columns.length > 1) {
+                item.columns.pop();
+              }
+            }
+            return true;
+          }
+          if (item.columns) {
+            item.columns.forEach((c: any) => updateRecursive(c.blocks));
+          }
+        }
+        return false;
+      };
+      updateRecursive(next);
+      return next;
+    });
+  };
 
-     const newBlock: EditorBlock = {
-         id: generateId(),
-         type: 'columns',
-         content: '',
-         styles: { padding: '1rem', margin: '0 0 1rem 0' },
-         columns: Array(count).fill(null).map(() => ({
-             id: generateId(),
-             blocks: [] // Initialize empty columns
-         }))
-     };
-     setBlocks(prev => [...prev, newBlock]);
+  const generateRandomImage = (blockId: string) => {
+    const query = window.prompt("Enter a keyword (e.g. 'nature', 'tech', 'city'):", "abstract");
+    if (query === null) return; 
+
+    const seed = Math.random().toString(36).substring(7);
+    const newUrl = `https://picsum.photos/seed/${query}-${seed}/800/400`;
+    updateBlockContent(blockId, newUrl);
   };
 
   // --- Render Helpers ---
 
   const renderBlock = (block: EditorBlock) => {
+    // Explicitly map classes so Tailwind sees them
+    const gridClasses: Record<number, string> = {
+      1: 'grid-cols-1',
+      2: 'grid-cols-2',
+      3: 'grid-cols-3',
+      4: 'grid-cols-4'
+    };
+
     return (
       <BlockWrapper
         key={block.id}
@@ -281,31 +307,69 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ blocks, setBlocks }) => 
                   alt="Block content" 
                   className="w-full h-auto rounded-sm object-cover" 
               />
-              <div className="absolute bottom-2 left-2 hidden group-hover:flex bg-black/70 p-2 rounded">
+              <div className="absolute bottom-2 left-2 hidden group-hover:flex items-center gap-2 bg-black/70 p-2 rounded">
                    <input 
                       className="bg-transparent text-white text-xs border-b border-gray-500 focus:border-white outline-none w-64"
                       value={block.content}
                       onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                      placeholder="Image URL"
                    />
+                   <button 
+                      onClick={(e) => { e.stopPropagation(); generateRandomImage(block.id); }}
+                      className="text-gray-300 hover:text-white transition-colors p-1 rounded hover:bg-white/10"
+                      title="Generate random image from keyword"
+                   >
+                      <Sparkles size={14} />
+                   </button>
               </div>
           </div>
         ) : block.type === 'columns' && block.columns ? (
-           <div className={`grid gap-4 grid-cols-${block.columns.length} w-full`}>
-              {block.columns.map((col) => (
-                 <div 
-                    key={col.id} 
-                    className="border-2 border-dashed border-gray-200 rounded p-2 bg-gray-50/50 min-h-[100px] transition-colors hover:border-indigo-200"
-                 >
-                    <SortableContext items={col.blocks} strategy={verticalListSortingStrategy} id={col.id}>
-                        <div className="min-h-[80px] h-full flex flex-col gap-2">
-                            {col.blocks.length === 0 && (
-                                <div className="text-xs text-gray-400 text-center py-4 italic">Drop blocks here</div>
-                            )}
-                            {col.blocks.map(renderBlock)}
-                        </div>
-                    </SortableContext>
-                 </div>
-              ))}
+           <div className="w-full">
+               {/* Column Controls */}
+               <div className="flex items-center justify-between mb-2 border-b border-gray-100 pb-1">
+                   <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Layout ({block.columns.length} cols)</span>
+                   <div className="flex items-center gap-1">
+                       <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 w-6 p-0"
+                          onClick={(e) => { e.stopPropagation(); modifyColumnCount(block.id, -1); }}
+                          title="Remove Column"
+                          disabled={block.columns.length <= 1}
+                       >
+                           <Minus size={14} />
+                       </Button>
+                       <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 w-6 p-0"
+                          onClick={(e) => { e.stopPropagation(); modifyColumnCount(block.id, 1); }}
+                          title="Add Column"
+                          disabled={block.columns.length >= 4}
+                       >
+                           <Plus size={14} />
+                       </Button>
+                   </div>
+               </div>
+               
+               {/* Grid using static class map */}
+               <div className={`grid gap-4 ${gridClasses[block.columns.length] || 'grid-cols-2'} w-full transition-all duration-200`}>
+                  {block.columns.map((col) => (
+                     <div 
+                        key={col.id} 
+                        className="border-2 border-dashed border-gray-200 rounded p-2 bg-gray-50/50 min-h-[100px] transition-colors hover:border-indigo-200"
+                     >
+                        <SortableContext items={col.blocks} strategy={verticalListSortingStrategy} id={col.id}>
+                            <div className="min-h-[80px] h-full flex flex-col gap-2">
+                                {col.blocks.length === 0 && (
+                                    <div className="text-xs text-gray-400 text-center py-4 italic">Drop blocks here</div>
+                                )}
+                                {col.blocks.map(renderBlock)}
+                            </div>
+                        </SortableContext>
+                     </div>
+                  ))}
+               </div>
            </div>
         ) : (
           <div className="p-4 border-2 border-dashed border-gray-300 rounded">Container</div>
@@ -341,10 +405,6 @@ export const EditorPane: React.FC<EditorPaneProps> = ({ blocks, setBlocks }) => 
           </Button>
           <Button variant="secondary" size="sm" onClick={() => addBlock('image')} title="Add Image">
             <ImageIcon size={16} className="mr-2" /> Image
-          </Button>
-          <div className="h-6 w-px bg-gray-200 mx-2"></div>
-           <Button variant="secondary" size="sm" onClick={addColumnsBlock} title="Add Columns Layout">
-            <Columns2 size={16} className="mr-2" /> Layout
           </Button>
         </div>
         <div className="flex items-center gap-2">
